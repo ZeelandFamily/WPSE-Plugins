@@ -1,13 +1,14 @@
 <?php
 /**
- * Plugin Name: Author Archive Disabler
+ * Plugin Name: ZF Author Archive Disabler
  * Plugin URI: http://wordpress.stackexchange.com/q/74924/6035
  * Description: Disable author archives with the click of a checkbox.
- * Author: Christopher Davis
- * Author URI: http://christopherdavis.me
- * License: MIT
+ * Author: Christopher Davis, Daniel Koskinen, Zeeland Family
+ * Author URI: http://zeelandfamily.fi
+ * License: MIT.
  *
  * Copyright (c) 2012 Christopher Davis <http://christopherdavis.me>
+ * Copyright (c) 2016 Daniel Koskinen <http://zeelandfamily.fi>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -28,104 +29,144 @@
  * DEALINGS IN THE SOFTWARE.
  *
  * @category    WordPress
- * @author      Christopher Davis <http://christopherdavis.me>
- * @copyright   2012 Christopher Davis
+ *
+ * @author      Christopher Davis <http://christopherdavis.me>, Daniel Koskinen <http://zeelandfamily.fi>
+ * @copyright   2012 Christopher Davis, 2016 Daniel Koskinen
  * @license     http://opensource.org/licenses/MIT MIT
+ * @package 	ZF_Author_Archive_Disabler
  */
 
-!defined('ABSPATH') && exit;
+! defined( 'ABSPATH' ) && exit;
 
-Author_Archive_Disabler::init();
+ZF_Author_Archive_Disabler::init();
 
-class Author_Archive_Disabler
-{
-    // meta key that will store the disabled status
-    const KEY = '_author_archive_disabled';
+/**
+ * Main class for plugin
+ */
+class ZF_Author_Archive_Disabler {
+	// meta key that will store the disabled status.
+	const KEY = '_author_archive_disabled';
 
-    // nonce name
-    const NONCE = 'author_archive_nonce';
+	// nonce name.
+	const NONCE = 'author_archive_nonce';
 
-    private static $ins = null;
+	/**
+	 * Instance
+	 *
+	 * @var null
+	 */
+	private static $ins = null;
 
-    public static function instance()
-    {
-        is_null(self::$ins) && self::$ins = new self;
-        return self::$ins;
-    }
+	/**
+	 * Get the instance
+	 *
+	 * @return object
+	 */
+	public static function instance() {
+		is_null( self::$ins ) && self::$ins = new self();
 
-    public static function init()
-    {
-        add_action('plugins_loaded', array(self::instance(), '_setup'));
-    }
+		return self::$ins;
+	}
 
-    // helper to see if the archive is disabled.
-    public static function is_disabled($user_id)
-    {
-        return 'on' == get_user_meta($user_id, self::KEY, true);
-    }
+	/**
+	 * Setup
+	 */
+	public static function init() {
+		add_action( 'plugins_loaded', array( self::instance(), '_setup' ) );
+	}
 
-    // adds actions and such
-    public function _setup()
-    {
-        add_action('edit_user_profile', array($this, 'field'));
-        add_action('show_user_profile', array($this, 'field'));
-        add_action('edit_user_profile_update', array($this, 'save'));
-        add_action('personal_options_update', array($this, 'save'));
-        add_action('template_redirect', array($this, 'maybe_disable'));
-        add_filter('author_link', array($this, 'change_link'), 10, 2);
-    }
+	/**
+	 * Helper to see if the archive is disabled
+	 *
+	 * @param  integer $user_id A user ID.
+	 * @return boolean
+	 */
+	public static function is_disabled( $user_id ) {
+		return 'on' == get_user_meta( $user_id, self::KEY, true );
+	}
 
-    public function field($user)
-    {
-        // only let admins do this.
-        if(!current_user_can('manage_options'))
-            return;
+	/**
+	 * Adds actions and such
+	 */
+	public function _setup() {
+		add_action( 'edit_user_profile', array( $this, 'field' ) );
+		add_action( 'show_user_profile', array( $this, 'field' ) );
+		add_action( 'edit_user_profile_update', array( $this, 'save' ) );
+		add_action( 'personal_options_update', array( $this, 'save' ) );
+		add_action( 'template_redirect', array( $this, 'maybe_disable' ) );
+		add_filter( 'author_link', array( $this, 'change_link' ), 10, 2 );
+	}
 
-        echo '<h4>', __('Disable Archive', 'author-archive-disabler'), '</h4>';
+	/**
+	 * Output the html for the Disable Archive field
+	 * @param  object $user A User object.
+	 */
+	public function field( $user ) {
+		// only let admins do this.
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
 
-        wp_nonce_field(self::NONCE . $user->ID, self::NONCE, false);
+		echo '<h4>', __( 'Disable Archive', 'author-archive-disabler' ), '</h4>';
 
-        printf(
-            '<label for="%1$s"><input type="checkbox" name="%1$s" id="%1$s" value="on" %2$s /> %3$s</label>',
-            esc_attr(self::KEY),
-            checked(get_user_meta($user->ID, self::KEY, true), 'on', false),
-            __('Disable Author Archive', 'author-archive-disabler')
-        );
-    }
+		wp_nonce_field( self::NONCE . $user->ID, self::NONCE, false );
 
-    public function save($user_id)
-    {
-        if(
-            !isset($_POST[self::NONCE]) ||
-            !wp_verify_nonce($_POST[self::NONCE], self::NONCE . $user_id)
-        ) return; // nonce is no good, bail
+		printf(
+			'<label for="%1$s"><input type="checkbox" name="%1$s" id="%1$s" value="on" %2$s /> %3$s</label>',
+			esc_attr( self::KEY ),
+			checked( get_user_meta( $user->ID, self::KEY, true ), 'on', false ),
+			__( 'Disable Author Archive', 'author-archive-disabler' )
+		);
+	}
 
-        if(!current_user_can('edit_user', $user_id))
-            return; // current user can't edit this user, bail
+	/**
+	 * Hook into user save.
+	 * @param  [type] $user_id [description]
+	 * @return [type]          [description]
+	 */
+	public function save( $user_id ) {
+		if (
+			! isset( $_POST[ self::NONCE ] ) ||
+			! wp_verify_nonce( $_POST[ self::NONCE ], self::NONCE . $user_id )
+		) {
+			return;
+		} // nonce is no good, bail
 
-        update_user_meta($user_id, self::KEY,
-            !empty($_POST[self::KEY]) ? 'on' : 'off');
-    }
+		if ( ! current_user_can( 'edit_user', $user_id ) ) {
+			return;
+		} // current user can't edit this user, bail
 
-    public function maybe_disable()
-    {
-        global $wp_query;
+		update_user_meta( $user_id, self::KEY, ! empty( $_POST[ self::KEY ] ) ? 'on' : 'off' );
+	}
 
-        // not an author archive? bail.
-        if(!is_author())
-            return;
+	/**
+	 * Maybe disable an author archive.
+	 */
+	public function maybe_disable() {
+		global $wp_query;
 
-        if(self::is_disabled(get_queried_object_id()))
-        {
-            $wp_query->set_404();
-        }
-    }
+		// not an author archive? bail.
+		if ( ! is_author() ) {
+			return;
+		}
 
-    public function change_link($link, $author_id)
-    {
-        if(self::is_disabled($author_id))
-            return apply_filters('author_archive_disabler_default_url', home_url(), $author_id);
+		if ( self::is_disabled( get_queried_object_id() ) ) {
+			$wp_query->set_404();
+		}
+	}
 
-        return $link;
-    }
+	/**
+	 * Link to home instead of author archive for disabled authors
+	 *
+	 * @param  string $link     Author archive link
+	 * @param  int $author_id 	User ID
+	 * @return string           Filtered archive link
+	 */
+	public function change_link( $link, $author_id ) {
+		if ( self::is_disabled( $author_id ) ) {
+			return apply_filters( 'author_archive_disabler_default_url', home_url(), $author_id );
+		}
+
+		return $link;
+	}
 }
